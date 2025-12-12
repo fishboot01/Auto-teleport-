@@ -1,0 +1,187 @@
+--[[ 
+    MOBILE AUTO FARM WIN / FINISH
+    Fitur: Set Finish Pos, Auto TP -> Auto Reset -> Loop
+    Dibuat untuk Executor Mobile (Delta/Fluxus/Hydrogen)
+]]
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+
+local lp = Players.LocalPlayer
+local AutoFarmActive = false
+local FinishCFrame = nil
+
+-- === UI SETUP ===
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local StatusLabel = Instance.new("TextLabel")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Name = "AutoFinishUI"
+if pcall(function() ScreenGui.Parent = CoreGui end) then
+    ScreenGui.Parent = CoreGui
+else
+    ScreenGui.Parent = lp:WaitForChild("PlayerGui")
+end
+
+-- Kotak Utama (Draggable)
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+MainFrame.Position = UDim2.new(0.6, 0, 0.3, 0) -- Posisi agak ke kanan
+MainFrame.Size = UDim2.new(0, 160, 0, 180)
+MainFrame.Active = true
+MainFrame.Draggable = true 
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = MainFrame
+
+-- Judul
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(255, 85, 0)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "AUTO FINISH FARM"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 13
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = Title
+
+-- Fungsi Buat Tombol
+function createButton(text, yPos, color, callback)
+    local btn = Instance.new("TextButton")
+    btn.Parent = MainFrame
+    btn.BackgroundColor3 = color
+    btn.Position = UDim2.new(0.05, 0, 0, yPos)
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
+    btn.Font = Enum.Font.GothamBold
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 11
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = btn
+    
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- STATUS LABEL
+StatusLabel.Parent = MainFrame
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Position = UDim2.new(0, 0, 0.85, 0)
+StatusLabel.Size = UDim2.new(1, 0, 0, 20)
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.Text = "Status: Idle"
+StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+StatusLabel.TextSize = 10
+
+-- === LOGIKA UTAMA ===
+
+-- Fungsi Loop Farming
+local function RunCycle()
+    task.spawn(function()
+        while AutoFarmActive do
+            if not FinishCFrame then
+                AutoFarmActive = false
+                StatusLabel.Text = "Set Finish Dulu!"
+                break
+            end
+
+            local char = lp.Character
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+                -- 1. Teleport ke Finish
+                char.HumanoidRootPart.CFrame = FinishCFrame
+                StatusLabel.Text = "Claiming Win..."
+                
+                -- 2. Tunggu sebentar (biar server register touch finish)
+                task.wait(0.5) -- Ubah angka ini jika internet lambat (misal 1 detik)
+                
+                -- 3. Reset Karakter (Mati)
+                if char:FindFirstChild("Humanoid") then
+                    char.Humanoid.Health = 0
+                    StatusLabel.Text = "Resetting..."
+                end
+                
+                -- 4. Tunggu sampai respawn (loop akan otomatis lanjut via CharacterAdded atau loop while)
+                -- Kita break loop dalam sini dan andalkan Event CharacterAdded untuk cycle berikutnya
+                break 
+            end
+            task.wait(1)
+        end
+    end)
+end
+
+-- Event saat Respawn
+lp.CharacterAdded:Connect(function(char)
+    if AutoFarmActive then
+        StatusLabel.Text = "Respawning..."
+        local root = char:WaitForChild("HumanoidRootPart", 5)
+        local hum = char:WaitForChild("Humanoid", 5)
+        
+        if root and hum then
+            task.wait(1) -- Jeda agar tidak error saat baru spawn
+            RunCycle() -- Jalankan cycle lagi
+        end
+    end
+end)
+
+
+-- === TOMBOL-TOMBOL ===
+
+-- 1. SET POSISI FINISH
+createButton("📍 1. SET POSISI FINISH", 40, Color3.fromRGB(0, 120, 215), function()
+    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        FinishCFrame = lp.Character.HumanoidRootPart.CFrame
+        StatusLabel.Text = "Lokasi Finish Disimpan!"
+        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+    end
+end)
+
+-- 2. TOGGLE AUTO FARM
+local ToggleBtn = createButton("▶ MULAI AUTO FARM", 85, Color3.fromRGB(0, 170, 0), function()
+    AutoFarmActive = not AutoFarmActive
+    
+    if AutoFarmActive then
+        if not FinishCFrame then
+            StatusLabel.Text = "Set Lokasi Dulu!"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+            AutoFarmActive = false
+            return
+        end
+        StatusLabel.Text = "Farming Aktif..."
+        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        RunCycle() -- Mulai loop
+    else
+        StatusLabel.Text = "Farming Berhenti"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end)
+
+-- Update Teks Tombol
+RunService.RenderStepped:Connect(function()
+    if AutoFarmActive then
+        ToggleBtn.Text = "⏹ STOP AUTO FARM"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    else
+        ToggleBtn.Text = "▶ MULAI AUTO FARM"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    end
+end)
+
+-- Tombol Close/Minimize sederhana
+createButton("❌ TUTUP MENU", 130, Color3.fromRGB(50, 50, 50), function()
+    ScreenGui:Destroy()
+end)
+
+-- Notif
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Auto Farm Win";
+    Text = "1. Berdiri di Finish -> Klik Set\n2. Klik Mulai Auto Farm";
+    Duration = 8;
+})
